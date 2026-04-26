@@ -26,16 +26,21 @@ SELECT
   SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(2)] AS FLOAT64)  AS negative_score,
   SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(3)] AS FLOAT64)  AS polarity,
   LOWER(AllNames)                                             AS all_names_lower
-FROM `gdelt-bq.gdeltv2.gkg`
-WHERE DATE >= {GDELT_START}
-  AND DATE <  {GDELT_END}
-  AND AllNames IS NOT NULL
-  AND V2Tone   IS NOT NULL
-  AND V2Tone   != ''
-  AND (
-    LOWER(AllNames) LIKE '%memphis grizzlies%'
-    OR LOWER(AllNames) LIKE '%golden state warriors%'
-  )
+FROM (
+  SELECT *,
+    ROW_NUMBER() OVER (PARTITION BY DocumentIdentifier ORDER BY DATE) AS rn
+  FROM `gdelt-bq.gdeltv2.gkg`
+  WHERE DATE >= {GDELT_START}
+    AND DATE <  {GDELT_END}
+    AND AllNames IS NOT NULL
+    AND V2Tone   IS NOT NULL
+    AND V2Tone   != ''
+    AND (
+      LOWER(AllNames) LIKE '%memphis grizzlies%'
+      OR LOWER(AllNames) LIKE '%golden state warriors%'
+    )
+)
+WHERE rn = 1
 LIMIT 500
 """
 
@@ -74,6 +79,9 @@ def main():
     if df.empty:
         print("No results — double-check credentials and project ID.")
         return
+
+    exact_dupes = df.duplicated().sum()
+    print(f"Exact duplicate rows (should be 0 after dedup): {exact_dupes}\n")
 
     grizzlies_rows = df[df["all_names_lower"].str.contains("memphis grizzlies", na=False)]
     warriors_rows  = df[df["all_names_lower"].str.contains("golden state warriors", na=False)]

@@ -132,15 +132,20 @@ SELECT
   SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(2)] AS FLOAT64)    AS negative_score,
   SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(3)] AS FLOAT64)    AS polarity,
   LOWER(AllNames)                                               AS all_names_lower
-FROM `gdelt-bq.gdeltv2.gkg`
-WHERE DATE >= {start_gdelt}
-  AND DATE <  {end_gdelt}
-  AND AllNames IS NOT NULL
-  AND V2Tone   IS NOT NULL
-  AND V2Tone   != ''
-  AND (
-      {team_conditions}
-  )
+FROM (
+  SELECT *,
+    ROW_NUMBER() OVER (PARTITION BY DocumentIdentifier ORDER BY DATE) AS rn
+  FROM `gdelt-bq.gdeltv2.gkg`
+  WHERE DATE >= {start_gdelt}
+    AND DATE <  {end_gdelt}
+    AND AllNames IS NOT NULL
+    AND V2Tone   IS NOT NULL
+    AND V2Tone   != ''
+    AND (
+        {team_conditions}
+    )
+)
+WHERE rn = 1
 """
 
 
@@ -209,6 +214,11 @@ def main():
         print(f"Cache file '{CACHE_FILE}' found — skipping BigQuery query.")
         print("  Delete it to force a fresh fetch.\n")
         raw = pd.read_csv(CACHE_FILE, dtype={"date_str": str})
+        before = len(raw)
+        raw = raw.drop_duplicates()
+        dropped = before - len(raw)
+        if dropped:
+            print(f"  Dropped {dropped:,} duplicate rows from cache.\n")
     else:
         if GCP_PROJECT == "your-gcp-project-id":
             sys.exit(
