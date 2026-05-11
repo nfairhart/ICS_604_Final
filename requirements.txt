@@ -1,0 +1,13 @@
+numpy
+pandas
+matplotlib
+scipy
+statsmodels
+scikit-learn
+requests
+beautifulsoup4
+pyarrow
+nba_api
+google-cloud-bigquery
+db-dtypes
+jupyter
